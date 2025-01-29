@@ -26,7 +26,8 @@ class Tetris:
         self.states.append(["S" for _ in range(10)])
 
 
-        self.tickSpeed=1000
+        self.tick_speed=1000
+        self.current_tick_speed = 1000
         self.cellSize=30
         self.queue = deque()
         self.build_piece_queue()
@@ -69,8 +70,6 @@ class Tetris:
         self.holdCanvas.grid(row=2,column=0)
 
         self.currentPieceChar = self.queue[0]
-        # self.currentPiece = Piece(pieceChar=self.currentPieceChar,row=0,col=4)
-        self.currentRotationState = 0
 
         self.heldPiece=""
         self.can_hold = True
@@ -92,14 +91,13 @@ class Tetris:
             temp_piece = Piece(self.currentPieceChar, row=0, col=4)
             self.create_piece(temp_piece, canvas=self.canvas)
             self.can_hold=True
-            self.currentRotationState=0
         else:
             self.move_live_down()
         self.draw_queue()
         self.check_clear()
 
         # self.print_states()
-        self.root.after(self.tickSpeed, lambda: self.update_game())
+        self.root.after(self.current_tick_speed, lambda: self.update_game())
 
     '''
     Checks for key pressed events such as moving left and right and updating tick speed
@@ -110,26 +108,18 @@ class Tetris:
         if event.keysym =="Right":
             self.horizontal_translation("R")
         if event.keysym == "Down":
-            self.tickSpeed = 75
+            self.current_tick_speed = 75
         if event.keysym == "c" and self.can_hold:
             self.hold_piece()
         if event.keysym == "Up":
             self.rotate_piece(angle=90)
-            self.currentRotationState = (self.currentRotationState+1)%4
-            print(self.currentRotationState)
         if event.keysym == "z":
             self.rotate_piece(angle = 270)
-            self.currentRotationState = (self.currentRotationState - 1) % 4
-            print(self.currentRotationState)
-
         if event.keysym == "r":
             self.root.destroy()
             Tetris()
         if event.keysym == "Shift_L":
             self.rotate_piece(angle =180)
-            self.currentRotationState = (self.currentRotationState + 2) % 4
-            print(self.currentRotationState)
-
         if event.keysym == "q":
             self.root.destroy()
 
@@ -212,7 +202,7 @@ class Tetris:
     '''
     def key_released(self,event):
         if event.keysym== "Down":
-            self.tickSpeed=500
+            self.current_tick_speed=self.tick_speed
 
     '''
     Checks the game canvas for a cleared row. If there is a cleared row, calls moveDown
@@ -231,6 +221,9 @@ class Tetris:
                     self.colors[i][j]=""
                     self.draw_square(row=i, col=j, color="grey", canvas=self.canvas)
                     self.move_down(cleared_row=i, row_one=True)
+                if self.lines_cleared  % 10 == 0 and self.current_tick_speed>100:
+                    self.tick_speed -= 100
+                    self.current_tick_speed -=100
 
     '''
     Moves all the rows down from the clearedRow and up. Is called as a result of clearing a row
@@ -353,7 +346,8 @@ class Tetris:
     Returns a formated string of the score
     '''
     def get_header(self):
-        return "Score: "+ str(self.score) + "\n Lines Cleared: " + str(self.lines_cleared)
+        return ("Score: "+ str(self.score) + "\n Lines Cleared: " + str(self.lines_cleared)
+                + " Speed: " + str(self.current_tick_speed))
 
     '''
     Prints the 2d array of tile states to the terminal
