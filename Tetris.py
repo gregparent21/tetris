@@ -75,6 +75,9 @@ class Tetris:
         self.can_hold = True
         self.firstHold = True
 
+        self.pivotX = None
+        self.pivotY = None
+
         self.update_game()
         self.root.mainloop()
 
@@ -91,12 +94,17 @@ class Tetris:
             temp_piece = Piece(self.currentPieceChar, row=0, col=4)
             self.create_piece(temp_piece, canvas=self.canvas)
             self.can_hold=True
+            self.pivotX = temp_piece.pivot[1]
+            self.pivotY = temp_piece.pivot[0]
+            self.draw_pivot(pivotX=self.pivotX,pivotY=self.pivotY)
         else:
             self.move_live_down()
+            self.pivotY+=1
+            self.draw_pivot(pivotX=self.pivotX,pivotY=self.pivotY)
         self.draw_queue()
         self.check_clear()
+        print(self.pivotY,self.pivotX)
 
-        # self.print_states()
         if not self.check_game_over():
             self.root.after(self.current_tick_speed, lambda: self.update_game())
         else:
@@ -104,12 +112,18 @@ class Tetris:
             game_over_label = tk.Label(self.root, text=string, font=('Arial', 30))
             game_over_label.grid(row = 3,column=1)
 
-
+    '''
+    Returns True if the game is over. Game is over if there is a settled tile in the first row
+    '''
     def check_game_over(self):
         if any("S" in value for value in self.states[0]):
             return True
         return False
 
+    def draw_pivot(self,pivotX,pivotY):
+        self.canvas.create_oval(pivotX*self.cellSize,pivotY*self.cellSize,
+                                pivotX*self.cellSize+4,pivotY*self.cellSize+4,
+                                outline="Black",fill="Red")
     '''
     Checks for key pressed events such as moving left and right and updating tick speed
     '''
@@ -179,12 +193,12 @@ class Tetris:
             elif angle == 270:
                 new_x = pivot_x - (y - pivot_y)
                 new_y = pivot_y + (x - pivot_x)
-            new_positions.append((new_x, new_y))
+            new_positions.append((int(new_x), int(new_y)))
 
-        for new_x, new_y in new_positions:
-            if not (0 <= new_x < len(self.states) and 0 <= new_y < len(self.states[0])) or self.states[new_x][new_y] == "S":
-                self.find_kick()
-                return
+        # for new_x, new_y in new_positions:
+        #     if not (0 <= new_x < len(self.states) and 0 <= new_y < len(self.states[0])) or self.states[new_x][new_y] == "S":
+        #         self.find_kick()
+        #         return
 
         for x, y in live_tiles:
             self.states[x][y] = "E"
@@ -198,10 +212,7 @@ class Tetris:
     Given a list of the live tiles, return the x and y coord of the pivot point
     '''
     def find_pivot_point(self,live_tiles):
-        pivot_x, pivot_y = live_tiles[1]
-        return  pivot_x, pivot_y
-        # return Piece(self.currentPieceChar,live_tiles[0][0],live_tiles[0][1]).pivot
-
+        return [self.pivotY,self.pivotX]
     '''
     Returns a set of new tiles in which the rotated piece can fall if there are potential collisions
     '''
@@ -269,14 +280,18 @@ class Tetris:
         for tile in liveTiles if translation == -1 else reversed(liveTiles):
             if direction == "L" :
                 if tile[1]-1<0 or self.states[tile[0]][tile[1]-1] == "S":
-                    break
+                    return
             if direction == "R":
                 if tile[1]+1>9 or self.states[tile[0]][tile[1]+1] == "S":
-                    break
+                    return
             self.states[tile[0]][tile[1]] = self.states[tile[0]][tile[1]-translation] if tile[1]-translation<9 else "E"
             self.states[tile[0]][tile[1]+translation] = "L"
             self.draw_square(tile[0], tile[1] + translation, color=self.currentColor, canvas=self.canvas)
             self.draw_square(tile[0], tile[1], color="grey", canvas=self.canvas)
+        if direction == "L":
+            self.pivotX-=1
+        if direction == "R":
+            self.pivotX+=1
 
     '''
     The gravity system that moves each live tile down during each frame
