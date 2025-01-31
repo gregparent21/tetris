@@ -97,7 +97,18 @@ class Tetris:
         self.check_clear()
 
         # self.print_states()
-        self.root.after(self.current_tick_speed, lambda: self.update_game())
+        if not self.check_game_over():
+            self.root.after(self.current_tick_speed, lambda: self.update_game())
+        else:
+            string = "Game Over! Score: " + str(self.score)
+            game_over_label = tk.Label(self.root, text=string, font=('Arial', 30))
+            game_over_label.grid(row = 3,column=1)
+
+
+    def check_game_over(self):
+        if any("S" in value for value in self.states[0]):
+            return True
+        return False
 
     '''
     Checks for key pressed events such as moving left and right and updating tick speed
