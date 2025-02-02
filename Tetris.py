@@ -107,6 +107,8 @@ class Tetris:
 
         if not self.check_game_over():
             self.root.after(self.current_tick_speed, lambda: self.update_game())
+            # self.root.after(2000, lambda: self.update_game())
+
         else:
             string = "Game Over! Score: " + str(self.score)
             game_over_label = tk.Label(self.root, text=string, font=('Arial', 30))
@@ -193,12 +195,16 @@ class Tetris:
             elif angle == 270:
                 new_x = pivot_x - (y - pivot_y)
                 new_y = pivot_y + (x - pivot_x)
+            else:
+                return
+            print(new_x,new_y)
             new_positions.append((int(new_x), int(new_y)))
 
-        # for new_x, new_y in new_positions:
-        #     if not (0 <= new_x < len(self.states) and 0 <= new_y < len(self.states[0])) or self.states[new_x][new_y] == "S":
-        #         self.find_kick()
-        #         return
+        for new_x, new_y in new_positions:
+            if (not (0 <= new_x < len(self.states) and 0 <= new_y < len(self.states[0])) or
+                    self.states[int(new_x)][int(new_y)] == "S"):
+                self.find_kick()
+                return
 
         for x, y in live_tiles:
             self.states[x][y] = "E"
@@ -213,6 +219,7 @@ class Tetris:
     '''
     def find_pivot_point(self,live_tiles):
         return [self.pivotY,self.pivotX]
+        # return live_tiles[1]
     '''
     Returns a set of new tiles in which the rotated piece can fall if there are potential collisions
     '''
