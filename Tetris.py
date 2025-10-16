@@ -23,11 +23,12 @@ class Tetris:
         self.pieceDispX = {"I":1.35,"O":1.4}
         self.pieceDispY = {"I":1.8}
 
-        self.states.append(["S" for _ in range(10)])
+    # do not append a sentinel row; keep states as a numRows x numColumns grid
 
 
-        self.tick_speed=1000
-        self.current_tick_speed = 1000
+        # default tick speed (will be set on start screen)
+        self.tick_speed = 500
+        self.current_tick_speed = 500
         self.cellSize=30
         self.queue = deque()
         self.build_piece_queue()
@@ -59,10 +60,10 @@ class Tetris:
                               highlightthickness=3, bg="grey")
         self.queueCanvas.grid(row=2,column =2,padx=50)
 
-        self.drawButton = tk.Button(self.root, text="Create",
-                                    command=lambda: self.create_piece(Piece(pieceChar=self.queue.popleft(),
-                                                                            row=0, col=3), canvas=self.canvas))
-        self.drawButton.grid(row=3, column=0)
+        # self.drawButton = tk.Button(self.root, text="Create",
+        #                             command=lambda: self.create_piece(Piece(pieceChar=self.queue.popleft(),
+        #                                                                     row=0, col=3), canvas=self.canvas))
+        # self.drawButton.grid(row=3, column=0)
 
         self.holdCanvas = tk.Canvas(self.root,width=140,height = 140,highlightbackground="black",highlightthickness=3,
                                     bg="grey")
@@ -78,8 +79,38 @@ class Tetris:
         self.pivotX = None
         self.pivotY = None
 
-        self.update_game()
+        # show start menu to choose speed and then begin game loop
+        self.show_start_menu()
         self.root.mainloop()
+
+    def show_start_menu(self):
+        # modal start window
+        start_win = tk.Toplevel(self.root)
+        start_win.title("Start Tetris")
+        start_win.transient(self.root)
+        start_win.grab_set()
+
+        tk.Label(start_win, text="Choose start speed (1 slow - 10 fast):").grid(row=0, column=0, columnspan=2, padx=10, pady=10)
+        speed_var = tk.IntVar(value=5)
+        speed_scale = tk.Scale(start_win, from_=1, to=10, orient=tk.HORIZONTAL, variable=speed_var)
+        speed_scale.grid(row=1, column=0, columnspan=2, padx=10, pady=5)
+
+        def on_start():
+            s = speed_var.get()
+            # map 1 -> 1000, 10 -> 100 linearly
+            mapped = int(round(1000 - (s - 1) * 100))
+            self.tick_speed = mapped
+            self.current_tick_speed = mapped
+            start_win.grab_release()
+            start_win.destroy()
+            # start the update loop
+            self.update_game()
+
+        start_btn = tk.Button(start_win, text="Start", command=on_start)
+        start_btn.grid(row=2, column=0, padx=10, pady=10)
+        quit_btn = tk.Button(start_win, text="Quit", command=self.root.destroy)
+        quit_btn.grid(row=2, column=1, padx=10, pady=10)
+
 
 
     '''
@@ -96,14 +127,14 @@ class Tetris:
             self.can_hold=True
             self.pivotX = temp_piece.pivot[1]
             self.pivotY = temp_piece.pivot[0]
-            self.draw_pivot(pivotX=self.pivotX,pivotY=self.pivotY)
+            # self.draw_pivot(pivotX=self.pivotX,pivotY=self.pivotY)
         else:
             self.move_live_down()
             self.pivotY+=1
-            self.draw_pivot(pivotX=self.pivotX,pivotY=self.pivotY)
+            # self.draw_pivot(pivotX=self.pivotX,pivotY=self.pivotY)
         self.draw_queue()
         self.check_clear()
-        print(self.pivotY,self.pivotX)
+        # print(self.pivotY,self.pivotX)
 
         if not self.check_game_over():
             self.root.after(self.current_tick_speed, lambda: self.update_game())
@@ -122,6 +153,9 @@ class Tetris:
             return True
         return False
 
+    '''
+    Debug helper method which draws the pivot point of the current piece
+    '''
     def draw_pivot(self,pivotX,pivotY):
         self.canvas.create_oval(pivotX*self.cellSize,pivotY*self.cellSize,
                                 pivotX*self.cellSize+4,pivotY*self.cellSize+4,
@@ -142,6 +176,8 @@ class Tetris:
             self.rotate_piece(angle=90)
         if event.keysym == "z":
             self.rotate_piece(angle = 270)
+        if event.keysym == "space":
+            self.hard_drop()
         if event.keysym == "r":
             self.root.destroy()
             Tetris()
@@ -178,41 +214,74 @@ class Tetris:
     pivot point of the tile in which it will be rotated by calling the find_pivot_point() method.
     '''
     def rotate_piece(self,angle):
-        live_tiles = [(x, y) for x in range(len(self.states)) for y in range(len(self.states[0])) if self.states[x][y] == "L"]
+        live_tiles = [(x, y) for x in range(self.numRows) for y in range(self.numColumns) if self.states[x][y] == "L"]
 
         if not live_tiles:
             return
-        pivot_x , pivot_y = self.find_pivot_point(live_tiles)
+        # pivot returned as [pivot_row, pivot_col]
+        pivot_row, pivot_col = self.find_pivot_point(live_tiles)
 
+        # keep a set of current live tiles so rotation can overlap old positions
+        live_set = set((r, c) for r, c in live_tiles)
+
+        # compute candidate rotated positions (rounded to nearest int)
         new_positions = []
-        for x, y in live_tiles:
+        for r, c in live_tiles:
             if angle == 90:
-                new_x = pivot_x + (y - pivot_y)
-                new_y = pivot_y - (x - pivot_x)
+                new_r = pivot_row + (c - pivot_col)
+                new_c = pivot_col - (r - pivot_row)
             elif angle == 180:
-                new_x = pivot_x - (x - pivot_x)
-                new_y = pivot_y - (y - pivot_y)
+                new_r = pivot_row - (r - pivot_row)
+                new_c = pivot_col - (c - pivot_col)
             elif angle == 270:
-                new_x = pivot_x - (y - pivot_y)
-                new_y = pivot_y + (x - pivot_x)
+                new_r = pivot_row - (c - pivot_col)
+                new_c = pivot_col + (r - pivot_row)
             else:
                 return
-            print(new_x,new_y)
-            new_positions.append((int(new_x), int(new_y)))
+            # round to nearest integer cell
+            new_positions.append((int(round(new_r)), int(round(new_c))))
 
-        for new_x, new_y in new_positions:
-            if (not (0 <= new_x < len(self.states) and 0 <= new_y < len(self.states[0])) or
-                    self.states[int(new_x)][int(new_y)] == "S"):
-                self.find_kick()
+        # quick validity check: if rotation fits without kicks, apply it
+        def positions_valid(positions, dr=0, dc=0):
+            for rr, cc in positions:
+                nr, nc = rr + dr, cc + dc
+                if not (0 <= nr < self.numRows and 0 <= nc < self.numColumns):
+                    return False
+                # treat settled tiles as collisions. It's ok to overlap current live tiles
+                if self.states[nr][nc] == "S" and (nr, nc) not in live_set:
+                    return False
+            return True
+
+        if positions_valid(new_positions, dr=0, dc=0):
+            chosen_offset = (0, 0)
+        else:
+            # try simple kicks: left, right, up, down (one cell)
+            kicks = [(0, -1), (0, 1), (-1, 0), (1, 0)]
+            chosen_offset = None
+            for dr, dc in kicks:
+                if positions_valid(new_positions, dr=dr, dc=dc):
+                    chosen_offset = (dr, dc)
+                    break
+            if chosen_offset is None:
+                # no valid kick found -> cancel rotation
                 return
 
-        for x, y in live_tiles:
-            self.states[x][y] = "E"
-            self.draw_square(row=x, col=y, color="grey", canvas=self.canvas)
+        # clear old live tiles
+        for r, c in live_tiles:
+            self.states[r][c] = "E"
+            self.draw_square(row=r, col=c, color="grey", canvas=self.canvas)
 
-        for new_x, new_y in new_positions:
-            self.states[new_x][new_y] = "L"
-            self.draw_square(row=new_x, col=new_y, color=self.currentColor, canvas=self.canvas)
+        # apply rotated (and kicked) positions
+        dr, dc = chosen_offset
+        for nr, nc in new_positions:
+            rr, cc = nr + dr, nc + dc
+            self.states[rr][cc] = "L"
+            self.draw_square(row=rr, col=cc, color=self.currentColor, canvas=self.canvas)
+
+        # update stored pivot to reflect any kick displacement
+        # pivot stored as [row, col] in Tetris as self.pivotY, self.pivotX
+        self.pivotY = pivot_row + dr
+        self.pivotX = pivot_col + dc
 
     '''
     Given a list of the live tiles, return the x and y coord of the pivot point
@@ -279,50 +348,135 @@ class Tetris:
     '''
     def horizontal_translation(self,direction):
         liveTiles = []
+        # collect live tiles
+        for r in range(self.numRows):
+            for c in range(self.numColumns):
+                if self.states[r][c] == "L":
+                    liveTiles.append((r, c))
+
+        if not liveTiles:
+            return
+
         translation = -1 if direction == "L" else 1
-        for col in range(len(self.states[0])):
-                for row in range(len(self.states)):
-                    if self.states[row][col]=="L":
-                        liveTiles.append([row,col])
-        for tile in liveTiles if translation == -1 else reversed(liveTiles):
-            if direction == "L" :
-                if tile[1]-1<0 or self.states[tile[0]][tile[1]-1] == "S":
-                    return
-            if direction == "R":
-                if tile[1]+1>9 or self.states[tile[0]][tile[1]+1] == "S":
-                    return
-            self.states[tile[0]][tile[1]] = self.states[tile[0]][tile[1]-translation] if tile[1]-translation<9 else "E"
-            self.states[tile[0]][tile[1]+translation] = "L"
-            self.draw_square(tile[0], tile[1] + translation, color=self.currentColor, canvas=self.canvas)
-            self.draw_square(tile[0], tile[1], color="grey", canvas=self.canvas)
-        if direction == "L":
-            self.pivotX-=1
-        if direction == "R":
-            self.pivotX+=1
+
+        # check collision for all tiles (allow overlap with current live tiles)
+        live_set = set(liveTiles)
+        for r, c in liveTiles:
+            nc = c + translation
+            if not (0 <= nc < self.numColumns):
+                return
+            if self.states[r][nc] == "S" and (r, nc) not in live_set:
+                return
+
+        # perform move in safe order: when moving left, iterate increasing cols; when right, decreasing cols
+        if translation == -1:
+            ordered = sorted(liveTiles, key=lambda t: (t[1], t[0]))
+        else:
+            ordered = sorted(liveTiles, key=lambda t: (t[1], t[0]), reverse=True)
+
+        for r, c in ordered:
+            nc = c + translation
+            # set new cell to live
+            self.states[r][nc] = "L"
+            self.draw_square(r, nc, color=self.currentColor, canvas=self.canvas)
+            # clear old cell
+            self.states[r][c] = "E"
+            self.draw_square(r, c, color="grey", canvas=self.canvas)
+
+        # update pivot column
+        if self.pivotX is not None:
+            self.pivotX = self.pivotX + translation
 
     '''
     The gravity system that moves each live tile down during each frame
     '''
     def move_live_down(self):
-        live_tiles=[]
-        for i in range(len(self.states)-1):
-            for j in range(len(self.states[i])):
+        # collect all live tiles (including those on the bottom row)
+        live_tiles = [(r, c) for r in range(self.numRows) for c in range(self.numColumns) if self.states[r][c] == "L"]
+        if not live_tiles:
+            return
+
+        live_set = set(live_tiles)
+
+        # if any live tile would fall out of bounds or land on an S tile (not part of live set), settle whole piece
+        for r, c in live_tiles:
+            below_r = r + 1
+            if below_r >= self.numRows or (self.states[below_r][c] == "S" and (below_r, c) not in live_set):
+                # settle
+                for i, j in live_tiles:
+                    self.states[i][j] = "S"
+                    self.colors[i][j] = self.currentColor
+                    self.draw_square(row=i, col=j, color=self.currentColor, canvas=self.canvas)
+                return
+
+        # otherwise, move live tiles down by 1 safely (do descending order)
+        for r, c in sorted(live_tiles, key=lambda t: t[0], reverse=True):
+            self.states[r][c] = "E"
+            self.draw_square(row=r, col=c, color="grey", canvas=self.canvas)
+            self.states[r+1][c] = "L"
+            self.draw_square(row=r+1, col=c, color=self.currentColor, canvas=self.canvas)
+
+        # update pivot row if present
+        if self.pivotY is not None:
+            self.pivotY += 1
+
+    def hard_drop(self):
+        """Drop the current live piece straight down until it would land on settled tiles, then settle it immediately."""
+        # collect live tiles
+        live_tiles = [(r, c) for r in range(self.numRows) for c in range(self.numColumns) if self.states[r][c] == "L"]
+        if not live_tiles:
+            return
+
+        # compute how many rows we can move down without collision
+        max_drop = None
+        live_set = set(live_tiles)
+        for r, c in live_tiles:
+            # look down from r+1 until collision or bottom
+            drop = 0
+            rr = r
+            while True:
+                rr += 1
+                if not (0 <= rr < self.numRows):
+                    break
+                if self.states[rr][c] == "S" and (rr, c) not in live_set:
+                    break
+                drop += 1
+            # drop is number of empty/overlap cells below this tile
+            if max_drop is None or drop < max_drop:
+                max_drop = drop
+
+        if max_drop is None or max_drop == 0:
+            for r, c in live_tiles:
+                if r + 1 < self.numRows and self.states[r+1][c] == "S":
+                    for i, j in live_tiles:
+                        self.states[i][j] = "S"
+                        self.colors[i][j] = self.currentColor
+                    return
+            return
+
+        for r, c in live_tiles:
+            self.states[r][c] = "E"
+            self.draw_square(row=r, col=c, color="grey", canvas=self.canvas)
+
+        new_tiles = []
+        for r, c in live_tiles:
+            nr = r + max_drop
+            self.states[nr][c] = "L"
+            self.draw_square(row=nr, col=c, color=self.currentColor, canvas=self.canvas)
+            new_tiles.append((nr, c))
+
+        # settling the tiles
+        for r, c in new_tiles:
+            self.states[r][c] = "S"
+            self.colors[r][c] = self.currentColor
+
+        # after settling, clear any remaining live markers (should be none)
+        for i in range(self.numRows):
+            for j in range(self.numColumns):
                 if self.states[i][j] == "L":
-                    live_tiles.append([i, j])
-        for tile in reversed(live_tiles):
-            if  self.states[tile[0]+1][tile[1]] == "S":
-                for i in range(20):
-                    for j in range(10):
-                        if self.states[i][j]=="L":
-                            self.states[i][j]="S"
-                            self.colors[i][j]=self.currentColor
-                break
-        else:
-            for tile in reversed(live_tiles):
-                self.states[tile[0]][tile[1]]=self.states[tile[0]-1][tile[1]] if tile[0]-1 >= 0 else "E"
-                self.states[tile[0]+1][tile[1]] = "L"
-                self.draw_square(tile[0] + 1, tile[1], color=self.currentColor, canvas=self.canvas)
-                self.draw_square(tile[0], tile[1], color="grey", canvas=self.canvas)
+                    self.states[i][j] = "S"
+                    self.colors[i][j] = self.currentColor
+
 
     '''
     Draws the grid in the game canvas
